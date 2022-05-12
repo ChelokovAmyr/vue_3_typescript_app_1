@@ -1,69 +1,122 @@
-import {createStore} from "vuex"
+import { createStore } from 'vuex'
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import createPersistedState from 'vuex-persistedstate'
 import Note from '@/models/NoteModel'
-import ToDo from '@/models/ToDoModel'
+import ToDo from "@/models/ToDoModel"
+import { useRefHistory } from '@vueuse/core'
+import { ref } from 'vue'
+
+const note: any = ref({
+    title: "",
+    todos: [] as ToDo[]
+})
+const { history, undo, redo, canUndo, canRedo, clear } = useRefHistory(note, {
+    deep: true
+})
 
 export default createStore({
-  state: {
-    notes: [] as Note[],
-    currentNote: {
-      title: '',
-      todos: [] as ToDo[],
-      id: 0
-    } as Note
-  },
-  mutations: {
-    addNote(state){
-      state.notes.push(state.currentNote)
+    state: {
+        notes: [] as Note[],
+        currentNote: note as Note,
+        currentId: 0
     },
-    deleteNote(state){
-      state.notes = state.notes.filter(note=> note.id !== state.currentNote.id)
+    mutations: {
+        // Notes
+
+        addNote(state) {
+            const id = state.currentId
+            state.notes.push({ ...state.currentNote, id })
+        },
+        deleteNote(state) {
+            state.notes = state.notes.filter(note => note.id != state.currentId)
+        },
+        updateNote(state) {
+            const note = state.notes.find(note => note.id === state.currentId)
+            const index = state.notes.indexOf(note as Note)
+            const id = state.currentId
+            state.notes[index] = { ...state.currentNote, id }
+        },
+
+
+        // Current Note
+        setCurrentNote(state, payload: Note) {
+            state.currentNote.title = payload.title
+            state.currentNote.todos = payload.todos
+        },
+        updateTitle(state, payload: string) {
+            state.currentNote.title = payload
+        },
+        updateTodos(state, payload: ToDo[]) {
+            state.currentNote.todos = payload
+        },
+        addNewTodo(state) {
+            state.currentNote.todos.push({
+                text: "",
+                completed: false
+            })
+        },
+        deleteTodo(state, index: number) {
+            state.currentNote.todos.splice(index, 1)
+        },
+
+        // History
+        clearHistory() {
+            clear()
+        },
+        undoChanges() {
+            undo()
+        },
+        redoChanges() {
+            redo()
+        },
+
+        // Current Id
+        setCurrentId(state, payload: number) {
+            state.currentId = payload
+        },
     },
-    updateNote(state){
-      const note = state.notes.find(note=> note.id === state.currentNote.id)
-      const index = state.notes.indexOf(note as Note)
-      state.notes[index] = state.currentNote
-    },
-    setCurrentNote(state, payload: Note) {
-      state.currentNote = payload
-    },
-    updateTitle(state, payload: string){
-      state.currentNote.title = payload
-    },
-    addNewTodo(state){
-      state.currentNote.todos.push({
-        text: '',
-        completed: false
-      })
-    },
-    deleteTodo(state, index: number){
-      state.currentNote.todos.splice(index,1)
-    }
-  },
-  actions: {
-   saveNote({commit}){
-     const isOldNote:boolean = this.state.notes.some(el=>el.id === this.state.currentNote.id)
-        if (isOldNote){
-          commit('updateNote')
-        } else {
-          commit('addNote')
+    actions: {
+        saveNote({ commit }) {
+            const filtredTodos = this.state.currentNote.todos.filter(todo => todo.text != '')
+            commit('updateTodos', filtredTodos)
+            const isOldNote: boolean = this.state.notes.some(el => el.id === this.state.currentId)
+            if (isOldNote) {
+                commit('updateNote')
+            }
+            else {
+                commit('addNote');
+            }
+
+        },
+        fetchCurrentNote({ commit }, noteId: number) {
+            const note = JSON.parse(JSON.stringify(this.state.notes.find(note => note.id === noteId)))
+            commit('setCurrentNote', note)
+            commit('setCurrentId', noteId)
+        },
+        updateCurrentNote({ commit }, note: Note) {
+            commit('setCurrentNote', note)
         }
-   },
-    fetchCurrentNote({commit}, noteId: number){
-      const note = JSON.parse(JSON.stringify(this.state.notes.find(note => note.id === noteId)))
-        commit('setCurrentNote', note)
+
     },
-    updateCurrentNote({commit}, note: Note){
-     commit('setCurrentNote', note)
-    }
-  },
-  getters: {
-    getIdOfLastNote(state): number {
-        if (state.notes.length > 0){
-        const index = state.notes.length - 1
-        return state.notes[index].id
-      } else {
-        return  0
-      }
-    }
-  }
+    getters: {
+        getIdOfLastNote(state): number {
+            if (state.notes.length > 0) {
+                const index = state.notes.length - 1
+
+                return state.notes[index].id
+            } else {
+                return 0
+            }
+        },
+        canUndo() {
+            return canUndo.value
+        },
+        canRedo() {
+            return canRedo.value
+        }
+    },
+    strict: true,
+    plugins: [createPersistedState()],
+
 })
